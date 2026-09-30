@@ -4,7 +4,7 @@ Screen Bridge is a macOS app that turns a nearby tablet or computer browser into
 
 ## Download
 
-Download [`Screen Bridge_0.1.0_aarch64.dmg`](https://github.com/hikaribrandan3-code/screen-bridge-macos/raw/refs/heads/main/Screen%20Bridge_0.1.0_aarch64.dmg). This build is for Apple silicon Macs.
+Download [`Screen Bridge_0.1.0_aarch64.dmg`](https://screen-bridge-macos.vercel.app/Screen%20Bridge_0.1.0_aarch64.dmg). This build is for Apple silicon Macs.
 
 ## Current build
 

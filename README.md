@@ -4,7 +4,7 @@ Screen Bridge is a macOS app that turns a nearby tablet or computer browser into
 
 ## Download
 
-Download [`Screen Bridge_0.1.0_aarch64.dmg`](https://screen-bridge-macos.vercel.app/Screen%20Bridge_0.1.0_aarch64.dmg). This build is for Apple silicon Macs.
+Download [Screen Bridge 0.1.0 for Apple silicon (ZIP)](https://screen-bridge-macos.vercel.app/Screen-Bridge-0.1.0-apple-silicon.zip). The original DMG is also included in this repository.
 
 ## Current build
 
@@ -21,7 +21,7 @@ Download [`Screen Bridge_0.1.0_aarch64.dmg`](https://screen-bridge-macos.vercel.
 3. Open the app and choose a device and connection mode.
 4. Follow the on-screen pairing steps.
 
-The app may require macOS privacy permissions for screen recording, audio capture, or local network access, depending on the selected features and macOS version.
+The app may require macOS privacy permissions for screen recording, audio capture, or local network access, depending on the selected features and macOS version. This build is ad-hoc signed and has no Developer ID team signature or notarization, so macOS may show an additional first-open warning.
 
 ## Source availability
 

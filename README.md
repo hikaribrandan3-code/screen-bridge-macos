@@ -1,32 +1,42 @@
 # Screen Bridge for macOS
 
-Screen Bridge is a macOS app that turns a nearby tablet or computer browser into an extended display. It pairs over the local network and offers Wi-Fi or cable connection modes.
+Screen Bridge is a native Mac app and a browser-based tablet client for experimenting with an extended display over a local network. Its source combines a Tauri 2 / React interface with a Rust backend that creates a virtual display, captures frames, serves a pairing page, and relays tablet input.
+
+## Stack
+
+- React 18, Vite, and the Tauri 2 JavaScript API
+- Rust with Axum WebSockets, mDNS discovery, Core Graphics, and Objective-C bindings
+- HTML/JavaScript client served locally to the paired tablet; no tablet app is required
+- macOS 12 or later is declared in the app bundle config; Apple Silicon is the currently published build target
+
+## Current status
+
+- Version 0.1.0 source is available in [`app-source/`](app-source/).
+- The repository includes Apple Silicon ZIP and DMG artifacts. The app is ad-hoc signed and not notarized, so macOS may show a first-open warning.
+- `CGVirtualDisplay` is a private macOS API resolved at runtime; macOS updates may affect it.
+- Pairing, display quality, touch input, cable networking, audio behavior, and compatibility across tablet/browser combinations still need hands-on release verification. Treat feature descriptions as implementation scope, not a compatibility guarantee.
+
+## Build
+
+On a Mac with Rust and Node.js installed:
+
+```sh
+cd app-source
+npm install
+npm run tauri dev
+```
+
+To create a release bundle:
+
+```sh
+npm run tauri build
+```
+
+The generated `.app` and `.dmg` are written under `app-source/src-tauri/target/release/bundle/`.
 
 ## Download
 
-Download [Screen Bridge 0.1.0 for Apple silicon (ZIP)](https://screen-bridge-macos.vercel.app/Screen-Bridge-0.1.0-apple-silicon.zip). The original DMG is also included in this repository.
+- [Apple Silicon ZIP](https://screen-bridge-macos.vercel.app/Screen-Bridge-0.1.0-apple-silicon.zip)
+- [DMG artifact in this repository](https://github.com/hikaribrandan3-code/screen-bridge-macos/blob/main/Screen%20Bridge_0.1.0_aarch64.dmg)
 
-## Current build
-
-- Version: 0.1.0
-- Architecture: Apple silicon (`arm64`)
-- Minimum macOS version declared by the app: 12.0
-- App framework: Tauri 2 with a Rust native backend and web-based interface
-- The app uses macOS virtual-display APIs. Audio capture may require macOS 14.2 or later.
-
-## Install
-
-1. Download the DMG from Releases and open it.
-2. Drag Screen Bridge to Applications.
-3. Open the app and choose a device and connection mode.
-4. Follow the on-screen pairing steps.
-
-The app may require macOS privacy permissions for screen recording, audio capture, or local network access, depending on the selected features and macOS version. This build is ad-hoc signed and has no Developer ID team signature or notarization, so macOS may show an additional first-open warning.
-
-## Source availability
-
-The installed app and a packaged DMG were available for this audit, but the original Tauri/Rust source project was not present in the available repositories or app bundle. This repository currently distributes the app only; it does not claim to contain the app's source code or an open-source license. The source project can be added when recovered.
-
-## Feature notes
-
-The original release notes describe QR/PIN pairing, touch input relay, mDNS discovery, and use with iPad, Android, and browser-equipped computers. The installed app exposes device selection, Wi-Fi/cable modes, and quality, resolution, audio, and language settings. The full tablet connection flow was not exercised during this audit, so compatibility and latency claims should be treated as release-note claims rather than independently tested results.
+This is a free, open-source project. Source is licensed under MIT; third-party components retain their own licenses.

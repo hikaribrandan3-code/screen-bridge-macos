@@ -1,0 +1,482 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Screen Bridge</title>
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; background: #000; image-rendering: pixelated; touch-action: none; }
+  #cursor { position: fixed; width: 20px; height: 20px; pointer-events: none; z-index: 999; top: -9999px; left: -9999px; }
+  #cursor svg { width: 100%; height: 100%; filter: drop-shadow(0 0 2px #0a84ff); }
+  #kbtrap { position: fixed; opacity: 0; top: -100px; left: -100px; width: 1px; height: 1px; }
+  #kbtoggle {
+    position: fixed; bottom: 16px; right: 16px; z-index: 998;
+    width: 44px; height: 44px; border-radius: 22px; border: none;
+    background: rgba(10,132,255,0.85); color: #fff; font-size: 20px;
+    display: none; align-items: center; justify-content: center;
+  }
+  #kbtoggle.show { display: flex; }
+  #overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: rgba(0,0,0,0.85); color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    text-align: center; padding: 24px; transition: opacity .3s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay h1 { font-size: 22px; font-weight: 700; }
+  #overlay p { font-size: 15px; color: rgba(255,255,255,.65); max-width: 420px; line-height: 1.5; }
+  #overlay button {
+    font-size: 17px; font-weight: 600; color: #fff; background: #0a84ff;
+    border: none; border-radius: 14px; padding: 12px 36px;
+  }
+  #fshint { font-size: 12px; color: rgba(255,255,255,.5); max-width: 320px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #ff9f0a; }
+  .dot.on { background: #30d158; box-shadow: 0 0 8px #30d158; }
+  #sleepwarn {
+    position: fixed; top: env(safe-area-inset-top, 8px); left: 50%;
+    transform: translateX(-50%) translateY(-120%); z-index: 997;
+    max-width: 92vw; padding: 10px 16px; border-radius: 12px;
+    background: rgba(255,159,10,0.95); color: #000;
+    font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    font-size: 13px; line-height: 1.4; transition: transform .3s;
+  }
+  #sleepwarn.show { transform: translateX(-50%) translateY(8px); }
+</style>
+</head>
+<body>
+<canvas id="screen"></canvas>
+<div id="cursor">
+  <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0 0L0 10L2.5 7.5L5 12L7 10.5L4.5 6L7 6L0 0Z" fill="#000" stroke="white" stroke-width="0.5"/>
+  </svg>
+</div>
+<input id="kbtrap" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
+<div id="sleepwarn">&#9888;&#65039; La pantalla puede apagarse sola: desactiva Ahorro de energ&iacute;a y pon Bloqueo autom&aacute;tico en &laquo;Nunca&raquo;. <br>Screen may sleep: turn off Low Power Mode and set Auto-Lock to Never. <b>(toca para cerrar / tap to dismiss)</b></div>
+<button id="kbtoggle" aria-label="Keyboard">&#9000;</button>
+<div id="overlay">
+  <div class="dot" id="dot"></div>
+  <h1>Screen Bridge</h1>
+  <p id="msg">Conectando con tu Mac… / Connecting to your Mac…</p>
+  <button id="go" style="display:none">Pantalla completa · Full Screen</button>
+  <p id="fshint" style="display:none"></p>
+</div>
+<script>
+  const canvas = document.getElementById('screen');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const msg = document.getElementById('msg');
+  const dot = document.getElementById('dot');
+  const go = document.getElementById('go');
+  const fshint = document.getElementById('fshint');
+  const cursor = document.getElementById('cursor');
+  const kbtrap = document.getElementById('kbtrap');
+  const kbtoggle = document.getElementById('kbtoggle');
+  let firstFrame = false;
+  let cursorData = null;
+  let ws = null;
+  let wakeLock = null;
+
+  // ----- System audio playback (Mac -> tablet speaker) -----
+  // Raw Float32 PCM in (interleaved when stereo), no decode step — Web
+  // Audio's AudioBuffer already wants Float32, so wire and playback formats
+  // match. A ~120ms jitter cushion absorbs WiFi delivery jitter: without it
+  // every late packet is an audible click.
+  const JITTER_SEC = 0.12;
+  let audioCtx = null;
+  let audioSampleRate = 48000;
+  let audioChannels = 1;
+  let nextPlayTime = 0;
+  let audioWs = null;
+
+  // iOS requires audio to start from a real user gesture. Any first touch on
+  // the page (or the Full Screen button) unlocks it; chunks arriving before
+  // that are dropped.
+  function unlockAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        nextPlayTime = 0;
+      } catch (e) { return; }
+    }
+    if (audioCtx.state === 'suspended') { audioCtx.resume().catch(() => {}); }
+  }
+  document.addEventListener('pointerdown', unlockAudio, { capture: true });
+
+  function connectAudio() {
+    audioWs = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/audio' + location.search);
+    audioWs.binaryType = 'arraybuffer';
+
+    audioWs.onmessage = (ev) => {
+      if (typeof ev.data === 'string') {
+        try {
+          const h = JSON.parse(ev.data);
+          audioSampleRate = h.sampleRate || audioSampleRate;
+          audioChannels = h.channels || 1;
+        } catch (e) {}
+        return;
+      }
+      if (!audioCtx || audioCtx.state !== 'running') return;
+
+      const floats = new Float32Array(ev.data);
+      const ch = audioChannels === 2 ? 2 : 1;
+      const frames = Math.floor(floats.length / ch);
+      if (frames === 0) return;
+
+      const buf = audioCtx.createBuffer(ch, frames, audioSampleRate);
+      if (ch === 2) {
+        // Deinterleave LRLR -> two channel arrays.
+        const l = buf.getChannelData(0), r = buf.getChannelData(1);
+        for (let i = 0; i < frames; i++) { l[i] = floats[i * 2]; r[i] = floats[i * 2 + 1]; }
+      } else {
+        buf.copyToChannel(floats, 0);
+      }
+
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+
+      // Prime (or re-prime after an underrun) with the jitter cushion, then
+      // schedule chunks back-to-back for gapless playback.
+      const now = audioCtx.currentTime;
+      if (nextPlayTime <= now) nextPlayTime = now + JITTER_SEC;
+      src.start(nextPlayTime);
+      nextPlayTime += buf.duration;
+    };
+    audioWs.onclose = () => setTimeout(connectAudio, 1500);
+  }
+
+  connectAudio();
+
+  // Keep the screen on while streaming — prevents auto-dim/sleep. A wake
+  // lock can only PREVENT sleep, never wake a locked screen; and iOS rejects
+  // the request entirely in Low Power Mode (NotAllowedError), which doubles
+  // as our detector for showing the warning banner.
+  async function requestWakeLock() {
+    try {
+      if (!wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+        hideSleepWarning();
+      }
+    } catch (e) {
+      if (e && e.name === 'NotAllowedError') showSleepWarning();
+    }
+  }
+
+  // iOS silently releases wake locks when the page loses visibility —
+  // re-acquire the moment we're back.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') requestWakeLock();
+  });
+
+  const sleepwarn = document.getElementById('sleepwarn');
+  function showSleepWarning() { sleepwarn.classList.add('show'); }
+  function hideSleepWarning() { sleepwarn.classList.remove('show'); }
+  sleepwarn.addEventListener('click', hideSleepWarning);
+
+  function connect() {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/stream' + location.search);
+    ws.binaryType = 'blob';
+
+    ws.onopen = () => {
+      // res=std (set by the Mac's Resolution setting) streams at 1x instead
+      // of Retina scale — 4x fewer pixels end to end, much smoother on WiFi.
+      const std = new URLSearchParams(location.search).get('res') === 'std';
+      const dpr = std ? 1 : (window.devicePixelRatio || 1);
+      const vw = Math.round(window.innerWidth * dpr);
+      const vh = Math.round(window.innerHeight * dpr);
+      ws.send(JSON.stringify({ type: 'hello', vw, vh }));
+    };
+
+    ws.onmessage = async (ev) => {
+      try {
+        // Cursor metadata (text) — jpeg is separate binary follow-up, or
+        // omitted entirely when screen content hasn't changed.
+        if (typeof ev.data === 'string') {
+          cursorData = JSON.parse(ev.data);
+          updateCursor();
+          return;
+        }
+
+        const bmp = await createImageBitmap(ev.data);
+        if (canvas.width !== bmp.width || canvas.height !== bmp.height) {
+          canvas.width = bmp.width;
+          canvas.height = bmp.height;
+        }
+        ctx.drawImage(bmp, 0, 0);
+        bmp.close();
+
+        if (!firstFrame) {
+          firstFrame = true;
+          dot.classList.add('on');
+          msg.textContent = 'Conectado / Connected';
+          go.style.display = 'block';
+          kbtoggle.classList.add('show');
+          showFullscreenHint();
+          requestWakeLock(); // Start keeping screen on as soon as streaming begins
+          setTimeout(() => overlay.classList.add('hidden'), 1500);
+        }
+      } catch (e) { /* dropped frame */ }
+    };
+    ws.onclose = () => {
+      firstFrame = false;
+      dot.classList.remove('on');
+      overlay.classList.remove('hidden');
+      kbtoggle.classList.remove('show');
+      msg.textContent = 'Conexión perdida, reintentando… / Connection lost, retrying…';
+      setTimeout(connect, 1500);
+    };
+  }
+
+  function sendInput(payload) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+    }
+  }
+
+  // getBoundingClientRect() on the canvas returns its full CSS box, not the
+  // visible content rect — with object-fit:contain those differ whenever the
+  // stream's aspect ratio doesn't exactly match the viewport's, leaving an
+  // unaccounted-for letterbox gap that throws off any position computed
+  // against the raw element rect. Compute the actual drawn content rect —
+  // shared by the cursor overlay (Mac -> tablet) and input relay (tablet ->
+  // Mac), which are exact inverses of each other.
+  function contentRect() {
+    const rect = canvas.getBoundingClientRect();
+    if (!canvas.width || !canvas.height) return rect;
+
+    const boxRatio = rect.width / rect.height;
+    const imgRatio = canvas.width / canvas.height;
+
+    if (imgRatio > boxRatio) {
+      const h = rect.width / imgRatio;
+      const top = rect.top + (rect.height - h) / 2;
+      return { left: rect.left, top, width: rect.width, height: h };
+    } else {
+      const w = rect.height * imgRatio;
+      const left = rect.left + (rect.width - w) / 2;
+      return { left, top: rect.top, width: w, height: rect.height };
+    }
+  }
+
+  function updateCursor() {
+    if (!cursorData || !canvas.width) return;
+
+    // Cursor movement detected — keep screen on
+    requestWakeLock();
+
+    if (!cursorData.visible) {
+      cursor.style.opacity = '0';
+      return;
+    }
+
+    const rect = contentRect();
+    const scaleX = rect.width / cursorData.w;
+    const scaleY = rect.height / cursorData.h;
+
+    const screenX = rect.left + (cursorData.x * scaleX);
+    const screenY = rect.top + (cursorData.y * scaleY);
+
+    cursor.style.left = (screenX - 2) + 'px';
+    cursor.style.top = (screenY - 2) + 'px';
+    cursor.style.opacity = '1';
+  }
+
+  // Inverse of the cursor math above: tablet CSS point -> Mac virtual
+  // display local pixel space.
+  function toMacCoords(clientX, clientY) {
+    const rect = contentRect();
+    if (!rect.width || !rect.height || !canvas.width) return null;
+    const x = ((clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((clientY - rect.top) / rect.height) * canvas.height;
+    if (x < 0 || y < 0 || x > canvas.width || y > canvas.height) return null;
+    return { x, y };
+  }
+
+  connect();
+
+  // ----- Pointer input relay (gesture state machine) -----
+  // One finger: tap = click, drag = mouse drag, 500ms still hold = right
+  // click. Two fingers: pan = scroll (touch devices fire no wheel events, so
+  // without this iPads simply cannot scroll). The left-down is DEFERRED
+  // until movement or release so a second finger landing can turn the
+  // gesture into a scroll without having already clicked something.
+  const SLOP = 8;          // CSS px of movement before a press becomes a drag
+  const LONG_PRESS_MS = 500;
+  const pointers = new Map();  // pointerId -> {x, y}
+  let pending = null;      // deferred single-finger press
+  let scrolling = false;   // two-finger pan in progress
+  let scrollLast = null;   // last midpoint
+  let suppressUntilAllUp = false;
+
+  function clearPending() {
+    if (pending && pending.timer) clearTimeout(pending.timer);
+    pending = null;
+  }
+
+  function macScale() {
+    const rect = contentRect();
+    return rect.width ? canvas.width / rect.width : 1;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (suppressUntilAllUp) return;
+
+    if (pointers.size === 2 && pending && !pending.downSent) {
+      // Second finger before the first press committed -> two-finger scroll.
+      clearPending();
+      scrolling = true;
+      const pts = [...pointers.values()];
+      scrollLast = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      return;
+    }
+    if (pointers.size > 1) return; // extra fingers during a drag: ignore
+
+    const p = toMacCoords(e.clientX, e.clientY);
+    if (!p) return;
+    pending = {
+      startX: e.clientX, startY: e.clientY, p,
+      downSent: false, longPressFired: false,
+      timer: setTimeout(() => {
+        // Still a single stationary finger after 500ms -> right click.
+        if (pending && !pending.downSent && pointers.size === 1) {
+          pending.longPressFired = true;
+          sendInput({ type: 'down', x: pending.p.x, y: pending.p.y, button: 2 });
+          sendInput({ type: 'up', x: pending.p.x, y: pending.p.y, button: 2 });
+        }
+      }, LONG_PRESS_MS),
+    };
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const prev = pointers.get(e.pointerId);
+    if (prev) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (scrolling && pointers.size === 2) {
+      const pts = [...pointers.values()];
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      if (scrollLast) {
+        const s = macScale();
+        // Content follows the fingers (natural scrolling): finger delta
+        // maps to the inverse wheel delta.
+        const dx = -(mid.x - scrollLast.x) * s;
+        const dy = -(mid.y - scrollLast.y) * s;
+        if (dx || dy) sendInput({ type: 'scroll', dx, dy });
+      }
+      scrollLast = mid;
+      return;
+    }
+
+    if (suppressUntilAllUp || pointers.size !== 1) return;
+
+    if (pending && !pending.downSent && !pending.longPressFired) {
+      const moved = Math.hypot(e.clientX - pending.startX, e.clientY - pending.startY);
+      if (moved > SLOP) {
+        // Press committed as a drag: down at the ORIGINAL point, then follow.
+        clearTimeout(pending.timer);
+        sendInput({ type: 'down', x: pending.p.x, y: pending.p.y, button: 0 });
+        pending.downSent = true;
+      } else {
+        return; // still within slop: don't jitter the Mac cursor
+      }
+    }
+    const p = toMacCoords(e.clientX, e.clientY);
+    if (p && (!pending || pending.downSent)) sendInput({ type: 'move', x: p.x, y: p.y });
+  });
+
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+
+    if (scrolling) {
+      // Two-finger pan over; swallow the leftover finger entirely.
+      if (pointers.size === 0) { scrolling = false; scrollLast = null; suppressUntilAllUp = false; }
+      else { suppressUntilAllUp = true; scrolling = false; scrollLast = null; }
+      return;
+    }
+    if (suppressUntilAllUp) {
+      if (pointers.size === 0) suppressUntilAllUp = false;
+      return;
+    }
+
+    if (pending) {
+      const p = toMacCoords(e.clientX, e.clientY) || pending.p;
+      if (pending.downSent) {
+        sendInput({ type: 'up', x: p.x, y: p.y, button: 0 });
+      } else if (!pending.longPressFired && e.type !== 'pointercancel') {
+        // Quick stationary tap -> full click on release.
+        sendInput({ type: 'down', x: pending.p.x, y: pending.p.y, button: 0 });
+        sendInput({ type: 'up', x: pending.p.x, y: pending.p.y, button: 0 });
+      }
+      clearPending();
+    }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+
+  // Trackpad/mouse wheel (desktops, some TVs) — touch never fires this.
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    sendInput({ type: 'scroll', dx: e.deltaX, dy: e.deltaY });
+  }, { passive: false });
+
+  // ----- Keyboard relay (hidden input summons the mobile OS keyboard) -----
+  kbtoggle.addEventListener('click', () => {
+    kbtrap.value = '';
+    kbtrap.focus({ preventScroll: true });
+  });
+
+  const SPECIAL_KEYS = ['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+  kbtrap.addEventListener('keydown', (e) => {
+    if (SPECIAL_KEYS.includes(e.key)) {
+      e.preventDefault();
+      sendInput({ type: 'key', key: e.key, down: true });
+    }
+  });
+  kbtrap.addEventListener('keyup', (e) => {
+    if (SPECIAL_KEYS.includes(e.key)) {
+      sendInput({ type: 'key', key: e.key, down: false });
+    }
+  });
+  kbtrap.addEventListener('input', () => {
+    if (kbtrap.value) {
+      sendInput({ type: 'text', s: kbtrap.value });
+      kbtrap.value = '';
+    }
+  });
+
+  // ----- Fullscreen -----
+  go.addEventListener('click', async () => {
+    overlay.classList.add('hidden');
+    const el = document.documentElement;
+    try { await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen()); } catch (e) {}
+    requestWakeLock();
+    unlockAudio();
+  });
+  // Recall the overlay via double-tap in the top-left corner only — not
+  // the whole canvas, which was popping the overlay back up during normal
+  // dragging/clicking (two quick taps anywhere used to count).
+  canvas.addEventListener('dblclick', (e) => {
+    if (e.clientX < 80 && e.clientY < 80) overlay.classList.remove('hidden');
+  });
+
+  // True fullscreen on iOS only exists in standalone (Add to Home Screen)
+  // mode — the in-tab Fullscreen API isn't available in Safari proper.
+  function showFullscreenHint() {
+    const isIOSSafariTab = ('standalone' in navigator) && navigator.standalone === false;
+    if (!isIOSSafariTab) return;
+    fshint.style.display = 'block';
+    fshint.textContent = 'Para pantalla completa real: Compartir → Añadir a pantalla de inicio. / For true fullscreen: Share → Add to Home Screen.';
+  }
+</script>
+</body>
+</html>

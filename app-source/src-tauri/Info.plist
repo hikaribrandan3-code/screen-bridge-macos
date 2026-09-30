@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required for the CoreAudio process tap (system-audio capture). Without
+	     this key macOS denies AudioHardwareCreateProcessTap silently and the
+	     tablet gets video but no sound. -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Screen Bridge streams your Mac's audio to the connected tablet or TV so sound follows the display.</string>
+	<!-- macOS 15 Sequoia prompts for local-network access; the app runs a local
+	     web server the tablet connects to over WiFi. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Screen Bridge serves your display to tablets and TVs on your local network.</string>
+</dict>
+</plist>

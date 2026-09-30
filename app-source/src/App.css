@@ -1,0 +1,231 @@
+:root {
+  --blue: #0a84ff;
+  --blue-deep: #0060df;
+  --green: #30d158;
+  --orange: #ff9f0a;
+  --red: #ff453a;
+  --text: rgba(255, 255, 255, 0.92);
+  --text-dim: rgba(255, 255, 255, 0.55);
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface-strong: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.14);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  background: radial-gradient(120% 100% at 50% 0%, #2c2c30 0%, #1b1b1f 55%, #131316 100%);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+.window {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.gear {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: color 0.15s, background 0.15s;
+}
+.gear:hover { color: var(--text); background: var(--surface); }
+
+.settings-panel {
+  position: absolute;
+  top: 46px;
+  right: 16px;
+  z-index: 10;
+  width: 230px;
+  background: rgba(40, 40, 44, 0.97);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-title { font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+.settings-panel label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text); }
+.settings-panel select {
+  appearance: none;
+  background: var(--surface-strong);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.connect-btn {
+  font-family: inherit;
+  font-size: 30px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(180deg, #2f97ff 0%, var(--blue) 45%, var(--blue-deep) 100%);
+  border: none;
+  border-radius: 22px;
+  padding: 16px 64px;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(10, 132, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+  margin-bottom: 10px;
+}
+.connect-btn:hover { filter: brightness(1.07); }
+.connect-btn:active { transform: scale(0.97); }
+.connect-btn:disabled { opacity: 0.6; cursor: default; }
+.connect-btn.disconnect {
+  background: linear-gradient(180deg, #4a4a50 0%, #38383e 100%);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  font-size: 22px;
+  padding: 13px 48px;
+}
+.connect-btn.disconnect:hover { background: linear-gradient(180deg, #5a3a3c 0%, #48292b 100%); color: #ff8a80; }
+
+.field-label { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+
+.device-select {
+  position: relative;
+  width: 260px;
+}
+.device-select select {
+  appearance: none;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 36px 10px 14px;
+  outline: none;
+  cursor: pointer;
+}
+.device-select select:focus { border-color: var(--blue); }
+.device-select::after {
+  content: '';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.8px solid var(--blue);
+  border-bottom: 1.8px solid var(--blue);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.device-icon { position: absolute; left: -24px; top: 50%; transform: translateY(-50%); color: var(--text-dim); }
+.device-empty {
+  width: 100%;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 11px 14px;
+}
+
+.mode-toggle {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.mode-toggle button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 26px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mode-toggle button.active {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.4);
+}
+
+.session-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.url-label { font-size: 13px; color: var(--text-dim); text-align: center; }
+.url {
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--blue);
+  background: rgba(10, 132, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 12px;
+  user-select: text;
+}
+.hint { font-size: 12px; color: var(--text-dim); text-align: center; line-height: 1.4; }
+.qr-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.qr { background: #fff; border-radius: 10px; padding: 6px; line-height: 0; }
+.qr svg { width: 120px; height: 120px; }
+.clients { font-size: 13px; color: var(--green); font-weight: 600; }
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  margin-top: 4px;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; }
+
+.error {
+  font-size: 13px;
+  color: #ff8a80;
+  background: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+  line-height: 1.4;
+}

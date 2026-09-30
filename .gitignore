@@ -1,1 +1,5 @@
 .DS_Store
+app-source/node_modules/
+app-source/dist/
+app-source/src-tauri/target/
+app-source/src-tauri/.tauri/

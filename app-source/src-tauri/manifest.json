@@ -1,0 +1,16 @@
+{
+  "name": "Screen Bridge",
+  "short_name": "Screen Bridge",
+  "display": "fullscreen",
+  "orientation": "any",
+  "start_url": "/",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

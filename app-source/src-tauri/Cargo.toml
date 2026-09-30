@@ -1,0 +1,33 @@
+[package]
+name = "screen-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Turn any tablet into a true extended display for your Mac"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
+axum = { version = "0.7", features = ["ws", "form"] }
+mdns-sd = "0.11"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+objc = "0.2"
+core-graphics = { version = "0.24", features = ["highsierra"] }
+core-foundation = "0.10"
+local-ip-address = "0.6"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+libc = "0.2"
+rand = "0.8"
+futures-util = "0.3"
+# screencapturekit = "8"  # System Swift toolchain broken (apple-metal + screencapturekit build.rs)
+
+[profile.dev]
+opt-level = 2
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -1,8 +1,7 @@
 //! System audio capture via CoreAudio's process-tap API
-//! (`AudioHardwareCreateProcessTap`, macOS 14.2+ — this Mac runs 15.3).
+//! (`AudioHardwareCreateProcessTap`, macOS 14.2+).
 //! Pure Rust + the ObjC runtime, same pattern `virtual_display.rs` already
-//! uses for CGVirtualDisplay — no Swift toolchain involved at all, so this
-//! sidesteps the broken system Swift Package Manager entirely.
+//! uses for CGVirtualDisplay — no Swift toolchain is needed for this path.
 //!
 //! Pipeline: CATapDescription (ObjC, msg_send!) -> AudioHardwareCreateProcessTap
 //! -> wrap the tap in a private AudioAggregateDevice (taps aren't directly
@@ -147,14 +146,6 @@ extern "C" {
         -> OSStatus;
 }
 
-fn nsstring(s: &str) -> id {
-    let c = std::ffi::CString::new(s).unwrap();
-    unsafe {
-        let cls = Class::get("NSString").unwrap();
-        msg_send![cls, stringWithUTF8String: c.as_ptr() as *const c_char]
-    }
-}
-
 fn nsstring_to_string(ns: id) -> String {
     unsafe {
         let ptr: *const c_char = msg_send![ns, UTF8String];
@@ -181,7 +172,7 @@ pub struct AudioCapture {
     device_id: AudioObjectID,
     ioproc_id: AudioDeviceIOProcID,
     // Kept alive so the client-data pointer handed to CoreAudio stays valid;
-    // the IOProc callback dereferences this on every audio cycle.
+    // Drop stops and unregisters the IOProc before this Box is released.
     _ctx: Box<IoCtx>,
 }
 

@@ -12,7 +12,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Form, Query, State,
     },
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
     Router,
@@ -90,7 +90,7 @@ struct Hello {
 }
 
 pub async fn run(
-    port: u16,
+    bound_listener: std::net::TcpListener,
     token: String,
     pin: String,
     clients: Arc<AtomicUsize>,
@@ -120,11 +120,18 @@ pub async fn run(
         .route("/manifest.json", get(manifest))
         .route("/apple-touch-icon.png", get(touch_icon))
         .route("/pair", get(pair_page).post(pair_submit))
-        .with_state(state);
+        .with_state(state)
+        .layer(axum::middleware::map_response(|mut response: Response| async move {
+            // Pairing tokens are URL query parameters. Do not leak them via
+            // navigation referrers or keep the protected page in HTTP caches.
+            response.headers_mut().insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+            response.headers_mut().insert("cache-control", HeaderValue::from_static("no-store"));
+            response.headers_mut().insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+            response
+        }));
 
-    let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
-        .await
-        .map_err(|e| format!("could not bind port {port}: {e}"))?;
+    let listener = tokio::net::TcpListener::from_std(bound_listener)
+        .map_err(|e| format!("could not start local server: {e}"))?;
     axum::serve(listener, router)
         .await
         .map_err(|e| e.to_string())
@@ -336,7 +343,13 @@ fn try_start_display(state: &ServerState, text: &str) -> Option<(u32, broadcast:
 
     let w = hello.vw.clamp(MIN_DIM, MAX_DIM);
     let h = hello.vh.clamp(MIN_DIM, MAX_DIM);
-    let display = VirtualDisplay::create("Screen Bridge", w, h).ok()?;
+    let display = match VirtualDisplay::create("Screen Bridge", w, h) {
+        Ok(display) => display,
+        Err(error) => {
+            let _ = state.app.emit("session-error", error);
+            return None;
+        }
+    };
     let display_id = display.display_id;
 
     let (tx, _) = broadcast::channel::<Frame>(4);

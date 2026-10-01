@@ -16,7 +16,7 @@ use serde::Serialize;
 use server::DisplaySlot;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::State;
+use tauri::{Emitter, State};
 
 const PORT: u16 = 47788;
 
@@ -25,12 +25,12 @@ struct Session {
     server: tauri::async_runtime::JoinHandle<()>,
     url: String,
     clients: Arc<AtomicUsize>,
-    mdns: Option<ServiceDaemon>,
+    _mdns: Option<ServiceDaemon>,
     // Held for the session's lifetime so the tap/aggregate device/IOProc stay
     // alive; dropping this tears audio capture down. `None` if audio capture
     // failed to start (e.g. permission not yet granted) — video/input still
     // work fine without it, this is a graceful degradation, not a hard error.
-    audio: Option<audio_out::AudioCapture>,
+    _audio: Option<audio_out::AudioCapture>,
 }
 
 struct AppState {
@@ -140,9 +140,14 @@ fn connect_display(
     let server_app = app.clone();
     let server_slot = slot.clone();
     let server_audio_tx = audio_tx.clone();
+    // Bind before reporting success so a busy port is visible in the Mac UI.
+    let listener = std::net::TcpListener::bind(("0.0.0.0", PORT))
+        .map_err(|e| format!("could not bind local server port {PORT}: {e}"))?;
+    listener.set_nonblocking(true).map_err(|e| format!("could not start local server: {e}"))?;
+    let error_app = app.clone();
     let server = tauri::async_runtime::spawn(async move {
         if let Err(e) = server::run(
-            PORT,
+            listener,
             server_token,
             server_pin,
             server_clients,
@@ -156,6 +161,7 @@ fn connect_display(
         .await
         {
             eprintln!("server error: {e}");
+            let _ = error_app.emit("session-error", e);
         }
     });
 
@@ -184,8 +190,8 @@ fn connect_display(
         server,
         url: url.clone(),
         clients,
-        mdns,
-        audio,
+        _mdns: mdns,
+        _audio: audio,
     });
 
     Ok(ConnectInfo { url, qr_svg, pin, audio_ok })
@@ -252,6 +258,7 @@ mod tests {
     // captures a frame from it, and JPEG-encodes it — the full pipeline minus
     // the network. The display appears on screen for ~2 seconds.
     #[test]
+    #[ignore = "requires real display and Screen Recording permission"]
     fn virtual_display_end_to_end() {
         let vd = virtual_display::VirtualDisplay::create("Screen Bridge Test", 1366, 1024)
             .expect("CGVirtualDisplay creation failed");
@@ -303,6 +310,7 @@ mod tests {
     // audibly playing (silence is still a stream of zeroed samples), so this
     // doesn't require anything to be playing during the test run.
     #[test]
+    #[ignore = "requires real system-audio capture permission"]
     fn audio_capture_end_to_end() {
         let (tx, mut rx) = tokio::sync::broadcast::channel::<std::sync::Arc<Vec<u8>>>(32);
         // Unmuted so a test run never leaves the Mac silent if it panics

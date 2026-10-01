@@ -78,8 +78,16 @@ export default function App() {
       setClients(n);
       setPhase((p) => (p === 'waiting' || p === 'streaming') ? (n > 0 ? 'streaming' : 'waiting') : p);
     });
-    return () => { clearInterval(pollRef.current); unlisten.then((f) => f()); };
-  }, [refreshDevices]);
+    const unlistenError = listen('session-error', async (e) => {
+      const message = String(e.payload || 'Unknown local server error');
+      setError(message.includes('virtual display') ? t.errDisplay + ' (' + message + ')' : t.errGeneric + ' (' + message + ')');
+      try { await invoke('disconnect_display'); } catch { /* session already ended */ }
+      setSession(null);
+      setClients(0);
+      setPhase('idle');
+    });
+    return () => { clearInterval(pollRef.current); unlisten.then((f) => f()); unlistenError.then((f) => f()); };
+  }, [refreshDevices, t.errDisplay, t.errGeneric]);
 
   const connect = async () => {
     setError(null);

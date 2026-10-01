@@ -1,6 +1,6 @@
 # Screen Bridge source
 
-This folder contains the macOS app and browser client source for Screen Bridge 0.1.0.
+This folder contains the macOS app and browser client source for Screen Bridge 0.1.1. It is an experimental personal project.
 
 ## Stack
 
@@ -12,10 +12,10 @@ This folder contains the macOS app and browser client source for Screen Bridge 0
 
 ## Build on macOS
 
-Install Rust and Node.js, then run:
+Install Rust, Node.js, and Xcode Command Line Tools on a Mac, then run:
 
 ```sh
-npm install
+npm ci
 npm run tauri dev
 ```
 
@@ -29,6 +29,6 @@ Build output is placed in `src-tauri/target/release/bundle/`.
 
 ## Implementation status
 
-The backend resolves Apple's private `CGVirtualDisplay` API at runtime, captures frames, and serves the tablet page over a local network connection. The tablet page contains pairing, display, audio, and input handling code. The complete pairing and display experience has not been independently verified across different Macs, tablets, browsers, or network setups. Treat compatibility and performance as work in progress.
+The backend resolves Apple's private `CGVirtualDisplay` API at runtime, captures frames, and serves the tablet page over local HTTP/WebSockets on port 47788. Pairing uses a short one-use PIN or a token embedded in the QR URL. The tablet page contains display, audio, and input code. Server bind and virtual-display errors are reported in the Mac UI. The complete experience has not been verified across different Macs, tablets, browsers, or networks. Expect lag and occasional failure.
 
-The app declares macOS 12 or later. Some audio APIs may need macOS 14.2 or later. The currently published build is Apple Silicon only and is ad-hoc signed, not notarized.
+The app declares macOS 12 or later. Audio capture needs macOS 14.2 or later. Screen Recording, Local Network, and optional System Audio Recording access may be needed. Use only on a trusted network: the local transport is not encrypted and a paired browser can send input to the Mac. The currently public build is Apple Silicon 0.1.0, ad-hoc signed and unnotarized; 0.1.1 is staged for smoke testing. For source audit details see [development notes](../DEVELOPMENT_NOTES.md).

@@ -76,8 +76,11 @@ pub struct VirtualDisplay {
     pub display_id: u32,
 }
 
-// The objc objects are only touched from create/drop; the raw pointers just
-// need to live inside the app state across threads.
+// The owned Objective-C objects live in DisplaySlot for the session lifetime.
+// DisplaySlot's mutex serializes create/drop and prevents concurrent release;
+// callbacks use the dispatch main queue configured on the descriptor. This
+// private API has no documented thread-safety contract, so compatibility
+// across macOS versions remains experimental.
 unsafe impl Send for VirtualDisplay {}
 
 impl VirtualDisplay {
@@ -123,11 +126,20 @@ impl VirtualDisplay {
 
             let settings: id = msg_send![settings_cls, alloc];
             let settings: id = msg_send![settings, init];
+            if settings.is_null() {
+                let _: () = msg_send![display, release];
+                return Err("could not configure virtual display".into());
+            }
             let _: () = msg_send![settings, setHiDPI: 0u32];
 
             let mode: id = msg_send![mode_cls, alloc];
             let mode: id =
                 msg_send![mode, initWithWidth: width as usize height: height as usize refreshRate: 60.0f64];
+            if mode.is_null() {
+                let _: () = msg_send![settings, release];
+                let _: () = msg_send![display, release];
+                return Err("could not set virtual display mode".into());
+            }
             let array_cls = Class::get("NSArray").unwrap();
             let modes: id = msg_send![array_cls, arrayWithObject: mode];
             let _: () = msg_send![settings, setModes: modes];
@@ -141,6 +153,11 @@ impl VirtualDisplay {
             }
 
             let display_id: u32 = msg_send![display, displayID];
+            if display_id == 0 {
+                let _: () = msg_send![settings, release];
+                let _: () = msg_send![display, release];
+                return Err("virtual display returned no display ID".into());
+            }
             Ok(VirtualDisplay {
                 display,
                 settings,

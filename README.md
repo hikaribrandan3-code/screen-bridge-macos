@@ -47,3 +47,7 @@ The generated `.app` and `.dmg` are written under `app-source/src-tauri/target/r
 Video, audio, and input move between your Mac and the paired browser across local HTTP/WebSockets; the app has no cloud relay. The transport is **not encrypted**. Anyone on the same network who obtains the QR URL or PIN could connect during that session. Use only a trusted local network, do not share the pairing URL or display sensitive content, and disconnect when done. The server sets no-store and no-referrer headers to reduce token exposure, but a browser may still retain the URL in its history. The app's input relay can control your Mac while paired.
 
 This is free source under the MIT License; third-party components keep their own licenses. AI coding tools assisted development. I defined the product behavior, tested the prototype on my Mac, reviewed the source, and documented limitations and changes in [development notes](DEVELOPMENT_NOTES.md).
+
+## Portfolio evidence
+
+[Mac app suite case study](https://hikari-brandan.vercel.app/projects/macos-app-suite) documents the product story and current limits.
